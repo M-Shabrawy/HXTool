@@ -9,18 +9,17 @@
 
 try:
 	import requests
-	from requests.packages.urllib3.exceptions import InsecureRequestWarning
 except ImportError:
 	print("HXTool requires the 'requests' module, please install it.")
 	exit(1)
-	
-import urllib
+
 import base64
 import json
 import logging
 import datetime
 import pickle
 import shutil
+
 
 class HXAPI:
 	HX_DEFAULT_PORT = 3000
@@ -487,6 +486,103 @@ class HXAPI:
 
 		return(ret, response_code, response_data)
 	
+	## Extended Forensics
+	#####################
+	EXTENDED_FORENSICS_MODULE_NAME = 'extendedforensics'
+	EXTENDED_FORENSICS_MODULE_API_VER = '1'
+
+	#Build Extended Forensics URI
+	def buildExtendedForensicsURI(self, api_endpoint='job', indicator_id=None):
+		uri = self.build_module_api_route(module_name=self.EXTENDED_FORENSICS_MODULE_NAME, 
+										  min_api_version=self.EXTENDED_FORENSICS_MODULE_API_VER,
+										  api_endpoint=api_endpoint)
+		return uri
+	
+	# List extended forensics status of jobs
+	def restListExtendedForensicsJobsStatus(self, beginning_row=0, ending_row=99, sort_term=None, filter_term={}):
+		
+		params = {
+			'from' : beginning_row,
+			'to' : ending_row
+		}
+		if sort_term:
+			params['sort'] = sort_term
+		if filter_term:
+			params['filters'] = filter_term
+		
+		request = self.build_request(self.buildExtendedForensicsURI(api_endpoint='grid') + '/data', params = params)
+		(ret, response_code, response_data, _) = self.handle_response(request)
+		
+		return(ret, response_code, response_data)
+	
+	# List extended forensics jobs
+	def restListExtendedForensicsJobs(self):
+		
+		request = self.build_request(self.buildExtendedForensicsURI() + '/list')
+		(ret, response_code, response_data, _) = self.handle_response(request)
+		
+		return(ret, response_code, response_data)
+	
+	# List extended forensics job inputs
+	def restListExtendedForensicsJobInputs(self,job_name='',basic=False):
+		
+		if job_name:
+			params = {
+				'job' : job_name
+			}
+			if basic:
+				params[basic] = 'true'
+			else:
+				params[basic] = 'false'
+			
+		request = self.build_request(self.buildExtendedForensicsURI() + '/input')
+		(ret, response_code, response_data, _) = self.handle_response(request)
+		
+		return(ret, response_code, response_data)
+	
+	# List extended forensics host sets
+	def restListExtendedForensicsHostSets(self):
+			
+		request = self.build_request(self.buildExtendedForensicsURI() + '/sets')
+		(ret, response_code, response_data, _) = self.handle_response(request)
+		
+		return(ret, response_code, response_data)
+
+	# Check that the module is enabled in policy for a given host set
+	def restCheckExtendedForensicsEnabledHostSet(self,hostSetName='All Hosts'):
+			
+		request = self.build_request(self.buildExtendedForensicsURI() + '/check',method='POST')
+		(ret, response_code, response_data, _) = self.handle_response(request)
+		
+		return(ret, response_code, response_data)
+
+	# Download the job results
+	def restDownloadkExtendedForensicsJobResults(self,job_id=0,destination_file_path = None):
+		
+		accept = 'application/octet-stream'
+
+		request = self.build_request(self.buildExtendedForensicsURI() + '/download', accept = accept)
+		try:
+			response = self._session.send(request, stream = True)
+			
+			if not response.encoding:
+				response.encoding = self.default_encoding
+			
+			if destination_file_path: 
+				with open(destination_file_path, 'wb') as f:
+					shutil.copyfileobj(response.raw, f)
+				return(True, response.status_code, None)	
+			else:
+				return(True, response.status_code, response)
+				
+		except (requests.HTTPError, requests.ConnectionError) as e:
+			response_code = None
+			if e.response:
+				response_code = e.response.status_code
+			return(False, response_code, e)
+		
+	
+
 	## Indicators
 	#############
 
@@ -593,7 +689,7 @@ class HXAPI:
 			params['search'] = search_term
 		params.update(query_terms)
 		
-		request = self.build_request(self.build_api_route(endpoint_url), params = param)
+		request = self.build_request(self.build_api_route(endpoint_url), params = params)
 		(ret, response_code, response_data, response_headers) = self.handle_response(request)
 		
 		return(ret, response_code, response_data)
